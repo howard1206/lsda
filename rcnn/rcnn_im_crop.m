@@ -78,15 +78,113 @@ if padding > 0 || use_square
   end
 end % padding > 0 || square
 
-window = im(bbox(2):bbox(4), bbox(1):bbox(3), :);
+%window = im(bbox(2):bbox(4), bbox(1):bbox(3), :);
 % We turn off antialiasing to better match OpenCV's bilinear 
 % interpolation that is used in Caffe's WindowDataLayer.
-tmp = imresize(window, [crop_height crop_width], ...
-    'bilinear', 'antialiasing', false);
+%     if ~strcmp(class(im),'gpuArray')
+%         tmp = imresize(window, [crop_height crop_width], ...
+%     'bilinear', 'antialiasing', false);
+%     else
+       width = size(im, 2);
+       height = size(im, 1);
+       cropResolution = double([crop_height , crop_width]);
+       inputPositions = double([bbox(2), bbox(1), bbox(4), bbox(3)]);
+       tmp = cropRectanglesMex( im, inputPositions, cropResolution ); %use Nvidia wrapper to accerate 
+%    end
+
+%tmp = do_resize(im, bbox, crop_height, crop_width);
+%tmp = do_resize(window, bbox, crop_height, crop_width);
+%tmp = bilinearInterpolation(window,[crop_height crop_width]);
+
 if ~isempty(image_mean)
   tmp = tmp - image_mean(pad_h+(1:crop_height), pad_w+(1:crop_width), :);
 end
 %figure(2); window_ = tmp; imagesc((window_-min(window_(:)))/(max(window_(:))-min(window_(:)))); axis image;
 window = zeros(crop_size, crop_size, 3, 'single');
-window(pad_h+(1:crop_height), pad_w+(1:crop_width), :) = tmp;
+window(pad_h+(1:crop_height), pad_w+(1:crop_width), :) = gather(tmp);
 %figure(3); imagesc((window-min(window(:)))/(max(window(:))-min(window(:)))); axis image; pause;
+end
+
+function [outputImage] = do_resize(inputImage, bbox, crop_height, crop_width)
+if true
+    oldSize = [bbox(4)-bbox(2)+1 bbox(3)-bbox(1)+1];    
+    scale = [crop_height/oldSize(1) crop_width/oldSize(2)];              %# The resolution scale factors: [rows columns]
+    newSize = max(scale.*oldSize(1:2),1);  %# Compute the new image size
+    newSize = double(int32(newSize));
+    %# Compute an upsampled set of indices:
+    rowIndex = min(round(((1:newSize(1))-0.5)./scale(1)+0.5+bbox(2)),size(inputImage,1));
+    colIndex = min(round(((1:newSize(2))-0.5)./scale(2)+0.5+bbox(1)),size(inputImage,2));
+else
+    oldSize = size(inputImage);                   %# Get the size of your image    
+    scale = [crop_height/oldSize(1) crop_width/oldSize(2)];              %# The resolution scale factors: [rows columns]
+    newSize = max(scale.*oldSize(1:2),1);  %# Compute the new image size
+    newSize = double(int32(newSize));
+    %# Compute an upsampled set of indices:
+    rowIndex = min(round(((1:newSize(1))-0.5)./scale(1)+0.5),oldSize(1));
+    colIndex = min(round(((1:newSize(2))-0.5)./scale(2)+0.5),oldSize(2));
+
+end
+    %# Index old image to get new image:
+    outputImage = inputImage(rowIndex,colIndex,:);
+end
+
+function [out] = bilinearInterpolation(im, out_dims)
+
+    %// Get some necessary variables first
+    in_rows = size(im,1);
+    in_cols = size(im,2);
+    out_rows = out_dims(1);
+    out_cols = out_dims(2);
+
+    %// Let S_R = R / R'        
+    S_R = in_rows / out_rows;
+    %// Let S_C = C / C'
+    S_C = in_cols / out_cols;
+
+    %// Define grid of co-ordinates in our image
+    %// Generate (x,y) pairs for each point in our image
+    [cf, rf] = meshgrid(1 : out_cols, 1 : out_rows);
+
+    %// Let r_f = r'*S_R for r = 1,...,R'
+    %// Let c_f = c'*S_C for c = 1,...,C'
+    rf = rf * S_R;
+    cf = cf * S_C;
+
+    %// Let r = floor(rf) and c = floor(cf)
+    r = floor(rf);
+    c = floor(cf);
+
+    %// Any values out of range, cap
+    r(r < 1) = 1;
+    c(c < 1) = 1;
+    r(r > in_rows - 1) = in_rows - 1;
+    c(c > in_cols - 1) = in_cols - 1;
+
+    %// Let delta_R = rf - r and delta_C = cf - c
+    delta_R = rf - r;
+    delta_C = cf - c;
+
+    %// Final line of algorithm
+    %// Get column major indices for each point we wish
+    %// to access
+    in1_ind = sub2ind([in_rows, in_cols], r, c);
+    in2_ind = sub2ind([in_rows, in_cols], r+1,c);
+    in3_ind = sub2ind([in_rows, in_cols], r, c+1);
+    in4_ind = sub2ind([in_rows, in_cols], r+1, c+1);       
+
+    %// Now interpolate
+    %// Go through each channel for the case of colour
+    %// Create output image that is the same class as input
+    out = zeros(out_rows, out_cols, size(im, 3));
+    out = cast(out, class(im));
+
+    for idx = 1 : size(im, 3)
+        chan = double(im(:,:,idx)); %// Get i'th channel
+        %// Interpolate the channel
+        tmp = chan(in1_ind).*(1 - delta_R).*(1 - delta_C) + ...
+                       chan(in2_ind).*(delta_R).*(1 - delta_C) + ...
+                       chan(in3_ind).*(1 - delta_R).*(delta_C) + ...
+                       chan(in4_ind).*(delta_R).*(delta_C);
+        out(:,:,idx) = cast(tmp, class(im));
+    end
+end

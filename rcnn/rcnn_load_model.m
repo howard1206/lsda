@@ -27,17 +27,21 @@ end
 assert(exist(rcnn_model.cnn.binary_file, 'file')>0, 'Missing cnn binary file: please run data/fetch_lsda7k_model.sh');
 assert(exist(rcnn_model.cnn.definition_file, 'file')>0, 'Missing definition file -- update repo');
 
+if caffe('is_initialized') == 1
+    caffe('reset');
+end
+
 rcnn_model.cnn.init_key = ...
-    caffe('init', rcnn_model.cnn.definition_file, rcnn_model.cnn.binary_file);
+    caffe('init', rcnn_model.cnn.definition_file, rcnn_model.cnn.binary_file,'test');    
 if exist('use_gpu', 'var') && ~use_gpu
   caffe('set_mode_cpu');
 else
   caffe('set_mode_gpu');
   if exist('device_id', 'var')
       caffe('set_device',device_id);
-  else
+  else 
       caffe('set_device',0);
   end
 end
-caffe('set_phase_test');
+%s84caffe('set_phase_test');
 rcnn_model.cnn.layers = caffe('get_weights');

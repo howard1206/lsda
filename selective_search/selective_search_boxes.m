@@ -15,7 +15,11 @@ else
 end
 
 if scale ~= 1
-  im = imresize(im, [NaN im_width]);
+    if ~strcmp(class(im),'gpuArray')
+        im = imresize(im, [NaN im_width]);   
+    else
+        im = imresize(im, 1/scale);     
+    end
 end
 
 % Parameters. Note that this controls the number of hierarchical
