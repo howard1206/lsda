@@ -1,6 +1,8 @@
 
 Modification on Large Scale Detection through Adaptation
 
+Remember to link your local caffe to external/caffe
+
 If you want to accerate the imresize of matlab native API, you could consider to use GPU acceration, which I cite from https://github.com/aosokin/cropRectanglesMex here.
 
 Citing
