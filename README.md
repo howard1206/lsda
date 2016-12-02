@@ -1,11 +1,11 @@
 
 Modification on Large Scale Detection through Adaptation
 
-You can download the pre-trained model and detectors on https://goo.gl/V8CBl2
+Note: 1. You can download the pre-trained model and detectors on https://goo.gl/V8CBl2
 
-Remember to link your local caffe to external/caffe
+Note: 2. Remember to link your local caffe to external/caffe
 
-If you want to accerate the imresize of matlab native API, you could consider to use GPU acceration, which I cite from https://github.com/aosokin/cropRectanglesMex here.
+Note: 3. If you want to accerate the imresize of matlab native API, you could consider to use GPU acceration, which I cite from https://github.com/aosokin/cropRectanglesMex here.
 
 Citing
 -------
